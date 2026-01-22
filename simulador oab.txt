@@ -1,0 +1,345 @@
+index.html
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Simulador Profissional OAB</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Roboto',sans-serif;background:#eef4ff;color:#0f172a}
+header{background:linear-gradient(90deg,#0b3c8c,#2563eb);color:#fff;padding:20px;font-size:22px;text-align:center}
+#layout{display:flex;height:100vh;display:none}
+#menu{width:240px;background:#0b3c8c;color:white;padding:20px}
+#menu button{width:100%;padding:12px;margin:6px 0;border:none;background:#1e40af;color:white;cursor:pointer;border-radius:5px}
+#menu button:hover{background:#2563eb}
+#content{flex:1;padding:30px;overflow:auto}
+.card{background:white;padding:25px;border-radius:10px;box-shadow:0 0 12px #ccc;margin-bottom:20px}
+input,select,textarea{width:100%;padding:10px;margin:8px 0;border-radius:6px;border:1px solid #c7d2fe}
+button.primary{background:#2563eb;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer}
+button.primary:hover{background:#1e40af}
+.option{border:1px solid #c7d2fe;padding:12px;margin:8px 0;cursor:pointer;border-radius:6px}
+.correct{background:#dcfce7;border-color:#22c55e}
+.wrong{background:#fee2e2;border-color:#ef4444}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<header>Simulador Profissional OAB</header>
+
+<!-- LOGIN -->
+<div id="login" class="card" style="max-width:400px;margin:50px auto">
+  <h2>Login / Cadastro</h2>
+  <input id="login_nome" placeholder="Nome">
+  <input id="login_senha" type="password" placeholder="Senha (mínimo 8 caracteres)">
+  <select id="login_perfil">
+    <option value="aluno">Aluno</option>
+    <option value="admin">Administrador</option>
+  </select>
+  <button class="primary" onclick="entrar()">Entrar</button>
+  <button class="primary" onclick="cadastrarConta()">Criar Conta</button>
+</div>
+
+<!-- SISTEMA -->
+<div id="layout">
+
+  <div id="menu">
+    <button onclick="mostrar('simulador')">Simulador Geral</button>
+    <button onclick="mostrar('topico')">Simulador por Tópico</button>
+    <button onclick="mostrar('historico')">Meu Histórico</button>
+    <button id="btnCadastro" onclick="mostrar('cadastroQuestao')">Cadastro de Questões</button>
+    <button id="btnAlunos" onclick="mostrar('cadastroAluno')">Cadastro de Alunos</button>
+    <button onclick="logout()">Sair</button>
+  </div>
+
+  <div id="content">
+
+    <!-- SIMULADOR GERAL -->
+    <div id="simulador" class="card hidden">
+      <h2>Simulador Geral</h2>
+      <button class="primary" onclick="iniciarSimulado()">Iniciar Simulado</button>
+      <div id="areaQuestao"></div>
+      <div id="comentario" class="hidden"></div>
+      <button id="btnProxima" class="primary hidden" onclick="proximaQuestao()">Próxima Questão</button>
+    </div>
+
+    <!-- SIMULADOR POR TÓPICO -->
+    <div id="topico" class="card hidden">
+      <h2>Simulador por Tópico</h2>
+      <select id="filtroMateria" onchange="atualizarTopicos()"></select>
+      <select id="filtroTopico"></select>
+      <button class="primary" onclick="iniciarSimuladoTopico()">Iniciar Simulado</button>
+      <div id="areaTopico"></div>
+      <div id="comentarioTopico" class="hidden"></div>
+      <button id="btnProximaTopico" class="primary hidden" onclick="proximaQuestaoTopico()">Próxima Questão</button>
+      <div id="resumoTopico"></div>
+    </div>
+
+    <!-- HISTÓRICO -->
+    <div id="historico" class="card hidden">
+      <h2>Meu Histórico</h2>
+      <div id="listaHistorico"></div>
+      <button class="primary" onclick="resetarHistorico()">Resetar Histórico</button>
+    </div>
+
+    <!-- CADASTRO DE QUESTÕES -->
+    <div id="cadastroQuestao" class="card hidden">
+      <h2>Cadastro de Questões (Administrador)</h2>
+      <input id="materia" placeholder="Matéria">
+      <input id="topicoQ" placeholder="Tópico">
+      <textarea id="enunciado" placeholder="Enunciado"></textarea>
+      <input id="a" placeholder="Alternativa A">
+      <input id="b" placeholder="Alternativa B">
+      <input id="c" placeholder="Alternativa C">
+      <input id="d" placeholder="Alternativa D">
+      <input id="gabarito" placeholder="Gabarito (A,B,C ou D)">
+      <input id="comentarioQ" placeholder="Comentário após resposta (opcional)">
+      <button class="primary" onclick="salvarQuestao()">Salvar Questão</button>
+      <h3>Lista de Questões Cadastradas</h3>
+      <div id="listaQuestoes"></div>
+    </div>
+
+    <!-- CADASTRO DE ALUNOS -->
+    <div id="cadastroAluno" class="card hidden">
+      <h2>Cadastrar Aluno (Administrador)</h2>
+      <input id="novoAlunoNome" placeholder="Nome do Aluno">
+      <input id="novoAlunoSenha" type="password" placeholder="Senha (mínimo 8 caracteres)">
+      <button class="primary" onclick="cadastrarAluno()">Cadastrar Aluno</button>
+      <h3>Alunos Cadastrados</h3>
+      <div id="listaAlunos"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let banco = JSON.parse(localStorage.getItem("banco")) || [];
+let usuarios = JSON.parse(localStorage.getItem("usuarios")) || {};
+let usuarioLogado = null;
+let listaAtual=[], indice=0, acertos=0;
+
+/* LOGIN */
+function entrar(){
+  let nome = login_nome.value.trim().toLowerCase();
+  let senha = login_senha.value;
+  let perfil = login_perfil.value;
+  if(!nome||!senha){alert("Preencha nome e senha"); return;}
+  if(perfil==="admin"){
+    if(nome!=="admin"||senha!=="oab2026"){alert("Credenciais do administrador incorretas"); return;}
+    usuarios["admin"] = {senha:"oab2026",perfil:"admin",historico:[]};
+  } else {
+    if(!usuarios[nome]){ alert("Aluno não cadastrado"); return;}
+    if(usuarios[nome].senha!==senha){alert("Senha incorreta"); return;}
+  }
+  usuarioLogado = nome;
+  localStorage.setItem("usuarios",JSON.stringify(usuarios));
+  login.classList.add("hidden");
+  document.getElementById('layout').style.display='flex';
+  if(usuarios[nome].perfil!=="admin"){ btnCadastro.style.display="none"; btnAlunos.style.display="none"; }
+  carregarFiltros();
+  carregarHistorico();
+  carregarAlunos();
+}
+
+/* CRIAR CONTA */
+function cadastrarConta(){
+  let nome = login_nome.value.trim().toLowerCase();
+  let senha = login_senha.value;
+  if(!nome||!senha){alert("Preencha nome e senha"); return;}
+  if(senha.length<8){alert("Senha deve ter 8 caracteres ou mais"); return;}
+  if(usuarios[nome]){alert("Aluno já cadastrado"); return;}
+  usuarios[nome]={senha,perfil:'aluno',historico:[]};
+  localStorage.setItem("usuarios",JSON.stringify(usuarios));
+  alert("Conta criada com sucesso! Faça login.");
+}
+
+/* MENU */
+function mostrar(id){document.querySelectorAll(".card").forEach(c=>c.classList.add("hidden")); document.getElementById(id).classList.remove("hidden");}
+
+/* CADASTRO QUESTÕES */
+function salvarQuestao(){
+  banco.push({
+    materia:materia.value,
+    topico:topicoQ.value,
+    enunciado:enunciado.value,
+    a:a.value,b:b.value,c:c.value,d:d.value,
+    gabarito:gabarito.value.toUpperCase(),
+    comentario:comentarioQ.value
+  });
+  localStorage.setItem("banco",JSON.stringify(banco));
+  alert("Questão cadastrada!");
+  atualizarListaQuestoes();
+  carregarFiltros();
+  materia.value=''; topicoQ.value=''; enunciado.value='';
+  a.value=''; b.value=''; c.value=''; d.value=''; gabarito.value=''; comentarioQ.value='';
+}
+
+function atualizarListaQuestoes(){
+  let listaDiv = document.getElementById("listaQuestoes");
+  listaDiv.innerHTML = '';
+  banco.forEach((q,i)=>{
+    listaDiv.innerHTML += `<p>
+      ${i+1} - [${q.materia} | ${q.topico}] ${q.enunciado}
+      <button onclick="editarQuestao(${i})">Editar</button>
+      <button onclick="excluirQuestao(${i})">Excluir</button>
+    </p>`;
+  });
+}
+
+function excluirQuestao(i){
+  if(confirm("Deseja realmente excluir esta questão?")){
+    banco.splice(i,1);
+    localStorage.setItem("banco",JSON.stringify(banco));
+    atualizarListaQuestoes();
+    carregarFiltros();
+    alert("Questão excluída!");
+  }
+}
+
+function editarQuestao(i){
+  let q = banco[i];
+  materia.value = q.materia;
+  topicoQ.value = q.topico;
+  enunciado.value = q.enunciado;
+  a.value = q.a; b.value = q.b; c.value = q.c; d.value = q.d;
+  gabarito.value = q.gabarito;
+  comentarioQ.value = q.comentario;
+  banco.splice(i,1);
+  localStorage.setItem("banco",JSON.stringify(banco));
+  atualizarListaQuestoes();
+}
+
+/* SIMULADOR GERAL */
+function iniciarSimulado(){
+  listaAtual = banco; indice=0; acertos=0;
+  window.areaQuestao = document.getElementById("areaQuestao");
+  window.comentario = document.getElementById("comentario");
+  window.btnProxima = document.getElementById("btnProxima");
+  comentario.classList.add("hidden"); btnProxima.classList.add("hidden"); areaQuestao.innerHTML="";
+  mostrarQuestao(areaQuestao);
+}
+
+function mostrarQuestao(area){
+  if(indice>=listaAtual.length){
+    usuarios[usuarioLogado].historico.push(`${acertos}/${listaAtual.length}`);
+    localStorage.setItem("usuarios",JSON.stringify(usuarios));
+    area.innerHTML=`<h3>Resultado: ${acertos}/${listaAtual.length}</h3>`;
+    comentario.classList.add("hidden"); btnProxima.classList.add("hidden"); carregarHistorico();
+    return;
+  }
+  let q = listaAtual[indice];
+  area.innerHTML = `<h3>${q.enunciado}</h3>` +
+    ["A","B","C","D"].map((l,i)=>`<div class="option" onclick="responder(this,'${l}','${q.gabarito}','${q.comentario||''}')">${l}) ${q[['a','b','c','d'][i]]}</div>`).join("");
+  comentario.classList.add("hidden"); btnProxima.classList.add("hidden");
+}
+
+function responder(el, resp, gab, comentarioText){
+  const options = areaQuestao.querySelectorAll('.option');
+  options.forEach((o,i)=>{
+    const letra = String.fromCharCode(65+i);
+    if(letra===gab) o.classList.add('correct');
+    if(letra===resp && resp!==gab) o.classList.add('wrong');
+    o.style.pointerEvents='none';
+  });
+  if(resp===gab) acertos++;
+  if(comentarioText){ comentario.textContent="Comentário: "+comentarioText; comentario.classList.remove("hidden"); }
+  btnProxima.classList.remove("hidden");
+}
+
+function proximaQuestao(){ indice++; mostrarQuestao(areaQuestao); }
+
+/* SIMULADOR POR TÓPICO */
+function iniciarSimuladoTopico(){
+  let mat=filtroMateria.value; let top=filtroTopico.value;
+  if(!mat||!top){alert("Selecione matéria e tópico."); return;}
+  listaAtual=banco.filter(q=>q.materia==mat && q.topico==top); indice=0; acertos=0;
+  window.areaTopico=document.getElementById("areaTopico");
+  window.comentarioTopico=document.getElementById("comentarioTopico");
+  window.btnProximaTopico=document.getElementById("btnProximaTopico");
+  document.getElementById("resumoTopico").innerHTML = "";
+  comentarioTopico.classList.add("hidden"); btnProximaTopico.classList.add("hidden"); areaTopico.innerHTML="";
+  mostrarQuestaoTopico();
+}
+
+function mostrarQuestaoTopico(){
+  if(indice>=listaAtual.length){
+    usuarios[usuarioLogado].historico.push(`${acertos}/${listaAtual.length}`);
+    localStorage.setItem("usuarios",JSON.stringify(usuarios));
+    areaTopico.innerHTML=`<h3>Resultado: ${acertos}/${listaAtual.length}</h3>`;
+    comentarioTopico.classList.add("hidden"); btnProximaTopico.classList.add("hidden"); carregarHistorico();
+    return;
+  }
+  let q=listaAtual[indice];
+  areaTopico.innerHTML=`<h3>${q.enunciado}</h3>`+
+    ["A","B","C","D"].map((l,i)=>`<div class="option" onclick="responderTopico(this,'${l}','${q.gabarito}','${q.comentario||''}')">${l}) ${q[['a','b','c','d'][i]]}</div>`).join("");
+  comentarioTopico.classList.add("hidden"); btnProximaTopico.classList.add("hidden");
+}
+
+function responderTopico(el, resp, gab, comentarioText){
+  const options = areaTopico.querySelectorAll('.option');
+  options.forEach((o,i)=>{
+    const letra=String.fromCharCode(65+i);
+    if(letra===gab) o.classList.add('correct');
+    if(letra===resp && resp!==gab) o.classList.add('wrong');
+    o.style.pointerEvents='none';
+  });
+  if(resp===gab) acertos++;
+
+  if(comentarioText){
+    comentarioTopico.textContent = "Comentário: " + comentarioText;
+    comentarioTopico.classList.remove("hidden");
+  } else {
+    comentarioTopico.classList.add("hidden");
+  }
+
+  btnProximaTopico.classList.remove("hidden");
+}
+
+function proximaQuestaoTopico(){ indice++; mostrarQuestaoTopico(); }
+
+/* FILTROS */
+function carregarFiltros(){
+  let materias=[...new Set(banco.map(q=>q.materia))];
+  filtroMateria.innerHTML = materias.map(m=>`<option>${m}</option>`).join('');
+  atualizarTopicos();
+}
+function atualizarTopicos(){
+  let mat=filtroMateria.value;
+  let tops=[...new Set(banco.filter(q=>q.materia==mat).map(q=>q.topico))];
+  filtroTopico.innerHTML=tops.map(t=>`<option>${t}</option>`).join('');
+}
+
+/* HISTÓRICO */
+function carregarHistorico(){
+  if(!usuarios[usuarioLogado]) return;
+  listaHistorico.innerHTML = usuarios[usuarioLogado].historico.map(h=>`<p>${h}</p>`).join('');
+}
+function resetarHistorico(){if(confirm("Deseja apagar seu histórico?")){usuarios[usuarioLogado].historico=[]; localStorage.setItem("usuarios",JSON.stringify(usuarios)); carregarHistorico();}}
+
+/* CADASTRO DE ALUNOS */
+function cadastrarAluno(){
+  let nome=novoAlunoNome.value.trim().toLowerCase();
+  let senha=novoAlunoSenha.value;
+  if(!nome||!senha){alert("Preencha nome e senha"); return;}
+  if(senha.length<8){alert("Senha deve ter 8 caracteres ou mais"); return;}
+  if(usuarios[nome]){alert("Aluno já cadastrado"); return;}
+  usuarios[nome]={senha,perfil:'aluno',historico:[]};
+  localStorage.setItem("usuarios",JSON.stringify(usuarios));
+  alert("Aluno cadastrado com sucesso!"); novoAlunoNome.value=''; novoAlunoSenha.value='';
+  carregarAlunos();
+}
+function carregarAlunos(){
+  if(!document.getElementById('listaAlunos')) return;
+  let html=''; Object.keys(usuarios).forEach(u=>{ if(usuarios[u].perfil==='aluno'){html+=`<p>${u} <button onclick="excluirAluno('${u}')">Excluir</button></p>`;}} );
+  listaAlunos.innerHTML=html;
+}
+function excluirAluno(nome){if(confirm(`Deseja excluir o aluno ${nome}?`)){delete usuarios[nome]; localStorage.setItem("usuarios",JSON.stringify(usuarios)); carregarAlunos();}}
+
+/* LOGOUT */
+function logout(){location.reload();}
+
+document.getElementById("btnCadastro").addEventListener("click",()=>{atualizarListaQuestoes();});
+</script>
+
+</body>
+</html>
